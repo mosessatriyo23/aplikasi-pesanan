@@ -17,8 +17,15 @@ import {
   Info
 } from 'lucide-react';
 
-// Konfigurasi Firebase
-const firebaseConfig = JSON.parse(__firebase_config);
+// Konfigurasi Firebase menggunakan variabel global lingkungan eksekusi
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -34,7 +41,6 @@ const PRICES = {
   LENGAN_KERUT: 7000
 };
 
-// Daftar Ukuran Polo (Hingga 5XL dengan kelipatan 5rb)
 const POLO_SIZES = [
   { id: 'S', label: 'S', extra: 0 },
   { id: 'M', label: 'M', extra: 0 },
@@ -66,7 +72,6 @@ export default function App() {
   const [responses, setResponses] = useState([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   
-  // Data Pesanan
   const [formData, setFormData] = useState({
     nama: '',
     wilayah: '',
@@ -83,11 +88,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInAnonymously(auth);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) { setError("Gagal menyambung ke sistem."); }
     };
     initAuth();
@@ -104,7 +105,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user, view]);
 
-  // Hitung Total Item
   const getTotalQty = (type) => {
     return Object.values(formData[type] || {}).reduce((a, b) => a + (parseInt(b) || 0), 0);
   };
@@ -115,7 +115,6 @@ export default function App() {
 
   const calculateTotalHarga = () => {
     let total = 0;
-    // Polo
     Object.keys(formData.polo).forEach(size => {
       const qty = parseInt(formData.polo[size]) || 0;
       const sizePrice = POLO_SIZES.find(s => s.id === size)?.extra || 0;
@@ -124,7 +123,6 @@ export default function App() {
     total += (formData.lenganPanjangPolo * PRICES.LENGAN_PANJANG);
     total += (formData.lenganKerutPolo * PRICES.LENGAN_KERUT);
 
-    // Kaos
     Object.keys(formData.kaos).forEach(size => {
       const qty = parseInt(formData.kaos[size]) || 0;
       const sizePrice = KAOS_SIZES.find(s => s.id === size)?.extra || 0;
@@ -144,13 +142,12 @@ export default function App() {
       setError("Silakan pilih minimal 1 produk.");
       return;
     }
-    // Validasi Lengan
     if (formData.lenganPanjangPolo + formData.lenganKerutPolo > totalPolo) {
-      setError("Jumlah pilihan lengan Polo melebihi jumlah baju yang dipesan.");
+      setError("Pilihan lengan Polo melebihi jumlah baju.");
       return;
     }
     if (formData.lenganPanjangKaos + formData.lenganKerutKaos > totalKaos) {
-      setError("Jumlah pilihan lengan Kaos melebihi jumlah baju yang dipesan.");
+      setError("Pilihan lengan Kaos melebihi jumlah baju.");
       return;
     }
 
@@ -166,7 +163,7 @@ export default function App() {
       });
       setSubmitted(true);
     } catch (err) { 
-      setError("Gagal mengirim pesanan. Silakan coba lagi."); 
+      setError("Gagal mengirim pesanan."); 
     } finally { 
       setLoading(false); 
     }
@@ -180,129 +177,265 @@ export default function App() {
   };
 
   // --- SUB-KOMPONEN UI ---
-  const QuantitySelector = ({ label, value, onChange, color = "blue", subtitle = "" }) => (
-    <div className="flex items-center justify-between p-3 border-b border-slate-100 last:border-0">
-      <div>
-        <span className="text-lg font-bold text-slate-700">{label}</span>
-        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+  const QuantitySelector = ({ label, value, onChange, colorClass = "blue", subtitle = "" }) => (
+    <div className="qty-row">
+      <div className="qty-info">
+        <span className="qty-label">{label}</span>
+        {subtitle && <p className="qty-subtitle">{subtitle}</p>}
       </div>
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => onChange(Math.max(0, value - 1))}
-          className="w-10 h-10 bg-slate-200 rounded-full text-xl font-bold active:bg-slate-300 transition-colors"
-        >-</button>
-        <span className="text-xl font-bold w-6 text-center">{value}</span>
-        <button 
-          onClick={() => onChange(value + 1)}
-          className={`w-10 h-10 bg-${color}-100 text-${color}-600 rounded-full text-xl font-bold active:bg-${color}-200 transition-colors`}
-        >+</button>
+      <div className="qty-controls">
+        <button onClick={() => onChange(Math.max(0, value - 1))} className="qty-btn-minus">-</button>
+        <span className="qty-number">{value}</span>
+        <button onClick={() => onChange(value + 1)} className={`qty-btn-plus qty-btn-plus-${colorClass}`}>+</button>
       </div>
     </div>
   );
 
-  const SleeveSection = ({ type, totalQty, longValue, wrinkledValue, onLongChange, onWrinkledChange }) => {
+  const SleeveSection = ({ totalQty, longValue, wrinkledValue, onLongChange, onWrinkledChange }) => {
     if (totalQty === 0) return null;
     return (
-      <div className="mt-6 p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 border-dashed animate-in fade-in zoom-in duration-300">
-        <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-          <Info size={16}/> Atur Jenis Lengan (Total {totalQty} Baju)
-        </p>
+      <div className="sleeve-card">
+        <p className="sleeve-title"><Info size={18}/> Atur Jenis Lengan (Total {totalQty} Baju)</p>
         <QuantitySelector 
           label="Lengan Panjang" 
-          subtitle="+Rp 5.000 per baju"
+          subtitle="+Rp 5.000 / baju"
           value={longValue} 
-          onChange={(v) => {
-            if (v + wrinkledValue <= totalQty) onLongChange(v);
-          }}
-          color="indigo"
+          onChange={(v) => { if (v + wrinkledValue <= totalQty) onLongChange(v); }}
+          colorClass="indigo"
         />
         <QuantitySelector 
           label="Lengan Kerut" 
-          subtitle="+Rp 7.000 per baju"
+          subtitle="+Rp 7.000 / baju"
           value={wrinkledValue} 
-          onChange={(v) => {
-            if (v + longValue <= totalQty) onWrinkledChange(v);
-          }}
-          color="indigo"
+          onChange={(v) => { if (v + longValue <= totalQty) onWrinkledChange(v); }}
+          colorClass="indigo"
         />
-        <p className="mt-3 text-xs text-slate-400 italic">
-          Sisa {totalQty - (longValue + wrinkledValue)} baju akan otomatis menjadi Lengan Pendek (Standar).
-        </p>
+        <p className="sleeve-footer">Sisa {totalQty - (longValue + wrinkledValue)} baju otomatis Lengan Pendek (Standar).</p>
       </div>
     );
   };
 
-  if (view === 'admin') {
-    return (
-      <div className="min-h-screen bg-slate-100 p-4 md:p-8 font-sans">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800"><Database className="text-blue-600"/> Data Pesanan</h1>
-            <button onClick={() => setView('user')} className="bg-slate-800 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-slate-700 transition-colors">Tutup Admin</button>
+  return (
+    <div className="app-wrapper">
+      <style>{`
+        :root {
+          --primary: #4f46e5;
+          --primary-hover: #4338ca;
+          --bg-soft: #f8fafc;
+          --text-main: #0f172a;
+          --text-muted: #64748b;
+          --white: #ffffff;
+          --green: #22c55e;
+          --red: #ef4444;
+          --indigo: #6366f1;
+          --emerald: #10b981;
+          --orange: #f97316;
+          --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+          --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        .app-wrapper {
+          background-color: var(--bg-soft);
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          padding: 40px 24px 180px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .container { 
+          width: 100%; 
+          max-width: 100%; /* Menghilangkan batas 680px */
+          margin: 0; 
+        }
+
+        .header { text-align: center; margin-bottom: 40px; }
+        .header h1 { font-size: clamp(2rem, 8vw, 3.5rem); font-weight: 900; color: var(--text-main); margin: 0; letter-spacing: -0.05em; line-height: 1.1; }
+        .header p { font-size: 1.25rem; color: var(--text-muted); margin-top: 15px; font-weight: 500; }
+
+        .card {
+          background: var(--white);
+          padding: clamp(20px, 4vw, 40px);
+          border-radius: 32px;
+          box-shadow: var(--shadow);
+          border-top: 8px solid var(--primary);
+          margin-bottom: 30px;
+          transition: transform 0.2s ease;
+          width: 100%;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+        .card-indigo { border-top-color: var(--indigo); }
+        .card-emerald { border-top-color: var(--emerald); }
+        .card-orange { border-top-color: var(--orange); }
+
+        .section-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin-bottom: 30px; display: flex; align-items: center; gap: 15px; }
+
+        .grid-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+        
+        .input-wrapper { display: flex; flex-direction: column; gap: 10px; }
+        .input-wrapper label { font-size: 0.9rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .input-field { 
+          width: 100%; padding: 22px; font-size: 1.25rem; border: 3px solid #e2e8f0; 
+          border-radius: 20px; outline: none; transition: all 0.2s ease; background: #fff; 
+        }
+        .input-field:focus { border-color: var(--primary); box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.1); }
+
+        /* Penyesuaian Grid untuk Ukuran Baju agar tidak terlalu memanjang di layar lebar */
+        .sizes-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 0 40px;
+        }
+
+        .qty-row { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 2px solid #f1f5f9; }
+        .qty-row:last-child { border-bottom: none; }
+        .qty-info { flex: 1; padding-right: 20px; }
+        .qty-label { font-size: 1.4rem; font-weight: 700; color: #1e293b; display: block; }
+        .qty-subtitle { font-size: 0.95rem; color: var(--text-muted); margin: 4px 0 0; font-weight: 600; }
+
+        .qty-controls { display: flex; align-items: center; gap: 24px; }
+        .qty-btn-minus, .qty-btn-plus { 
+          width: 56px; height: 56px; border-radius: 20px; border: none; font-size: 2rem; 
+          font-weight: 700; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+          display: flex; align-items: center; justify-content: center;
+        }
+        .qty-btn-minus { background: #f1f5f9; color: var(--text-main); }
+        .qty-btn-minus:active { background: #e2e8f0; transform: scale(0.9); }
+        
+        .qty-btn-plus-blue { background: #eff6ff; color: #2563eb; }
+        .qty-btn-plus-indigo { background: #eef2ff; color: var(--indigo); }
+        .qty-btn-plus-emerald { background: #ecfdf5; color: var(--emerald); }
+        .qty-btn-plus-orange { background: #fff7ed; color: var(--orange); }
+        .qty-btn-plus:active { transform: scale(0.95); opacity: 0.8; }
+
+        .qty-number { font-size: 1.75rem; font-weight: 900; width: 40px; text-align: center; color: var(--text-main); }
+
+        .sleeve-card { margin-top: 40px; padding: 32px; background: #f8fafc; border-radius: 28px; border: 3px dashed #cbd5e1; }
+        .sleeve-title { font-size: 1.1rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin: 0 0 24px; display: flex; align-items: center; gap: 10px; }
+        .sleeve-footer { font-size: 1rem; color: var(--text-muted); font-style: italic; margin-top: 20px; font-weight: 500; }
+
+        .footer { 
+          position: fixed; bottom: 0; left: 0; right: 0; 
+          background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); 
+          padding: 24px 40px; border-top: 2px solid #e2e8f0; z-index: 100; 
+          box-shadow: 0 -15px 30px -5px rgba(0,0,0,0.1); 
+        }
+        .footer-content { 
+          width: 100%; 
+          max-width: 100%; 
+          margin: 0 auto; 
+          display: flex; 
+          flex-direction: row; 
+          justify-content: space-between; 
+          align-items: center; 
+          gap: 30px; 
+        }
+        
+        @media (max-width: 640px) {
+          .footer-content { flex-direction: column; text-align: center; gap: 20px; }
+          .price-display { width: 100%; }
+        }
+
+        .price-display { flex: 1; }
+        .price-label { font-size: 1rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em; }
+        .price-val { font-size: clamp(2.5rem, 6vw, 3.5rem); font-weight: 950; color: var(--primary); margin: 0; line-height: 1; display: flex; align-items: center; gap: 15px; }
+        .item-count { font-size: 1.1rem; color: #1e293b; font-weight: 900; background: #f1f5f9; padding: 6px 16px; border-radius: 12px; }
+
+        .btn-submit { 
+          padding: 24px 60px; border-radius: 24px; font-size: 1.75rem; font-weight: 900; 
+          border: none; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+          display: flex; align-items: center; justify-content: center; gap: 15px; 
+          box-shadow: 0 15px 25px -5px rgba(34, 197, 94, 0.3); 
+          min-width: 320px;
+        }
+        .btn-submit:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; box-shadow: none; transform: none; }
+        .btn-submit:not(:disabled) { background: var(--green); color: var(--white); }
+        .btn-submit:not(:disabled):hover { background: #15803d; transform: translateY(-4px); box-shadow: 0 20px 30px -10px rgba(34, 197, 94, 0.4); }
+
+        .admin-trigger { position: fixed; top: 24px; right: 24px; color: #cbd5e1; border: none; background: transparent; cursor: pointer; transition: all 0.3s; z-index: 150; }
+        .admin-trigger:hover { color: var(--primary); transform: rotate(15deg) scale(1.1); }
+
+        .admin-panel { position: fixed; inset: 0; background: #f1f5f9; z-index: 200; padding: clamp(20px, 4vw, 40px); overflow-y: auto; }
+        .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .table-container { background: var(--white); border-radius: 32px; overflow-x: auto; box-shadow: var(--shadow-lg); border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: var(--primary); color: var(--white); padding: 24px; font-weight: 800; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 0.05em; }
+        td { padding: 24px; border-bottom: 1px solid #f1f5f9; font-size: 1.05rem; }
+        
+        .badge { display: inline-block; padding: 6px 12px; border-radius: 10px; font-weight: 800; margin-right: 8px; font-size: 0.85rem; text-transform: uppercase; }
+        .badge-indigo { background: #eef2ff; color: var(--indigo); border: 2px solid #e0e7ff; }
+        .badge-emerald { background: #ecfdf5; color: var(--emerald); border: 2px solid #d1fae5; }
+
+        .success-screen { position: fixed; inset: 0; background: #f0fdf4; display: flex; align-items: center; justify-content: center; z-index: 300; padding: 24px; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .success-card { background: var(--white); padding: 60px; border-radius: 48px; text-align: center; max-width: 520px; width: 100%; border-bottom: 15px solid var(--green); box-shadow: 0 35px 70px -15px rgba(0,0,0,0.2); }
+        .success-icon { width: 120px; height: 120px; background: #dcfce7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 30px; color: var(--green); }
+        
+        .btn-restart { width: 100%; padding: 24px; border-radius: 24px; font-size: 1.5rem; font-weight: 800; border: none; background: #1e293b; color: var(--white); cursor: pointer; transition: 0.3s ease; }
+        .btn-restart:hover { background: #0f172a; transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+        .error-msg { text-align: center; color: var(--red); font-weight: 800; font-size: 1.1rem; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+
+      <button onClick={() => setView('admin')} className="admin-trigger"><Database size={40}/></button>
+
+      {view === 'admin' ? (
+        <div className="admin-panel">
+          <div className="admin-header">
+            <h1 style={{fontSize: '2.5rem', fontStyle: 'normal', fontWeight: 900}}><Database size={40} style={{verticalAlign: 'middle', marginRight: '15px'}} color="var(--primary)"/> Data Pesanan</h1>
+            <button onClick={() => setView('user')} style={{background: '#1e293b', color: 'white', padding: '15px 30px', borderRadius: '20px', border: 'none', fontStyle: 'normal', fontWeight: 800, cursor: 'pointer', boxShadow: 'var(--shadow)'}}>Tutup Admin</button>
           </div>
-          
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden overflow-x-auto border border-slate-200">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-blue-600 text-white">
+          <div className="table-container">
+            <table>
+              <thead>
                 <tr>
-                  <th className="p-4 font-bold border-r border-blue-500">Pendaftar</th>
-                  <th className="p-4 font-bold border-r border-blue-500 text-center">Polo</th>
-                  <th className="p-4 font-bold border-r border-blue-500 text-center">Kaos</th>
-                  <th className="p-4 font-bold border-r border-blue-500 text-center">Aksesori</th>
-                  <th className="p-4 font-bold text-right">Total Bayar</th>
-                  <th className="p-4 font-bold text-center">Aksi</th>
+                  <th>Pendaftar</th>
+                  <th>Baju & Ukuran</th>
+                  <th>Aksesori</th>
+                  <th style={{textAlign: 'right'}}>Total Harga</th>
+                  <th style={{textAlign: 'center'}}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {responses.length === 0 ? (
-                  <tr><td colSpan="6" className="p-10 text-center text-slate-400 italic">Belum ada pesanan masuk.</td></tr>
+                  <tr><td colSpan="5" style={{textAlign: 'center', padding: '80px', color: '#94a3b8', fontSize: '1.5rem', fontStyle: 'normal', fontWeight: 600}}>Belum ada pesanan masuk.</td></tr>
                 ) : responses.map(order => (
-                  <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                    <td className="p-4 border-r border-slate-100">
-                      <div className="font-bold text-slate-800">{order.nama}</div>
-                      <div className="text-xs text-slate-400 uppercase font-semibold">{order.wilayah}</div>
+                  <tr key={order.id}>
+                    <td>
+                      <div style={{fontWeight: 800, color: '#1e293b', fontSize: '1.25rem', fontStyle: 'normal'}}>{order.nama}</div>
+                      <div style={{fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', fontStyle: 'normal', letterSpacing: '0.05em', marginTop: '4px', fontWeight: 700}}>{order.wilayah}</div>
                     </td>
-                    <td className="p-4 border-r border-slate-100 text-xs">
-                      <div className="flex flex-wrap gap-1">
-                        {Object.entries(order.polo).filter(([_, q]) => q > 0).map(([s, q]) => (
-                          <span key={s} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-100">{s}:{q}</span>
+                    <td>
+                      <div style={{marginBottom: '10px'}}>
+                        {Object.entries(order.polo || {}).filter(([_, q]) => q > 0).map(([s, q]) => (
+                          <span key={s} className="badge badge-indigo">Polo {s}:{q}</span>
                         ))}
                       </div>
-                      {(order.lenganPanjangPolo > 0 || order.lenganKerutPolo > 0) && (
-                        <div className="text-blue-600 font-bold mt-2 pt-2 border-t border-slate-100 border-dashed">
-                          {order.lenganPanjangPolo > 0 && <div>PJG: {order.lenganPanjangPolo}</div>}
-                          {order.lenganKerutPolo > 0 && <div>KRT: {order.lenganKerutPolo}</div>}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4 border-r border-slate-100 text-xs">
-                      <div className="flex flex-wrap gap-1">
-                        {Object.entries(order.kaos).filter(([_, q]) => q > 0).map(([s, q]) => (
-                          <span key={s} className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold border border-emerald-100">{s}:{q}</span>
+                      <div>
+                        {Object.entries(order.kaos || {}).filter(([_, q]) => q > 0).map(([s, q]) => (
+                          <span key={s} className="badge badge-emerald">Kaos {s}:{q}</span>
                         ))}
                       </div>
-                      {(order.lenganPanjangKaos > 0 || order.lenganKerutKaos > 0) && (
-                        <div className="text-emerald-600 font-bold mt-2 pt-2 border-t border-slate-100 border-dashed">
-                          {order.lenganPanjangKaos > 0 && <div>PJG: {order.lenganPanjangKaos}</div>}
-                          {order.lenganKerutKaos > 0 && <div>KRT: {order.lenganKerutKaos}</div>}
-                        </div>
-                      )}
                     </td>
-                    <td className="p-4 border-r border-slate-100 text-xs text-center font-bold text-slate-600">
-                      {order.topi > 0 && <div className="bg-orange-50 text-orange-700 px-2 py-1 rounded mb-1">Topi: {order.topi}</div>}
-                      {order.mug > 0 && <div className="bg-amber-50 text-amber-700 px-2 py-1 rounded">Mug: {order.mug}</div>}
+                    <td style={{fontSize: '1rem', fontStyle: 'normal', fontWeight: 700, color: '#475569'}}>
+                      {order.topi > 0 && <div>Topi: {order.topi}</div>}
+                      {order.mug > 0 && <div>Mug: {order.mug}</div>}
                     </td>
-                    <td className="p-4 font-black text-right text-blue-700 whitespace-nowrap">
-                      Rp {order.totalHarga?.toLocaleString()}
-                    </td>
-                    <td className="p-4 text-center">
+                    <td style={{textAlign: 'right', fontStyle: 'normal', fontWeight: 900, color: 'var(--primary)', fontSize: '1.5rem'}}>Rp {order.totalHarga?.toLocaleString()}</td>
+                    <td style={{textAlign: 'center'}}>
                       {deleteConfirmId === order.id ? (
-                        <div className="flex flex-col gap-1 items-center">
-                          <button onClick={() => deleteOrder(order.id)} className="bg-red-600 text-white text-[10px] px-3 py-1 rounded uppercase font-bold">Hapus</button>
-                          <button onClick={() => setDeleteConfirmId(null)} className="text-[10px] text-slate-400 underline">Batal</button>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center'}}>
+                          <button onClick={() => deleteOrder(order.id)} style={{background: 'var(--red)', color: 'white', fontSize: '0.8rem', padding: '8px 16px', borderRadius: '10px', border: 'none', fontStyle: 'normal', fontWeight: 900}}>HAPUS</button>
+                          <button onClick={() => setDeleteConfirmId(null)} style={{fontSize: '0.8rem', color: '#94a3b8', textDecoration: 'underline', border: 'none', background: 'transparent', fontStyle: 'normal', fontWeight: 700}}>Batal</button>
                         </div>
                       ) : (
-                        <button onClick={() => setDeleteConfirmId(order.id)} className="text-red-400 hover:text-red-600 p-2 transition-colors"><Trash2 size={18}/></button>
+                        <button onClick={() => setDeleteConfirmId(order.id)} style={{color: '#fca5a5', border: 'none', background: 'transparent', cursor: 'pointer', transition: '0.2s'}}><Trash2 size={32}/></button>
                       )}
                     </td>
                   </tr>
@@ -311,77 +444,61 @@ export default function App() {
             </table>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (submitted) {
-    return (
-      <div className="min-h-screen bg-green-50 flex items-center justify-center p-6 font-sans">
-        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center max-w-md w-full border-b-[12px] border-green-600 animate-in zoom-in duration-500">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle size={60} className="text-green-500" />
+      ) : submitted ? (
+        <div className="success-screen">
+          <div className="success-card">
+            <div className="success-icon"><CheckCircle size={80} /></div>
+            <h1 style={{fontSize: '3rem', fontStyle: 'normal', fontWeight: 950, marginBottom: '15px'}}>Berhasil!</h1>
+            <p style={{fontSize: '1.5rem', color: '#64748b', marginBottom: '40px', fontWeight: 600}}>Data pesanan Anda sudah masuk ke sistem kami.</p>
+            <button 
+              onClick={() => {
+                setSubmitted(false);
+                setFormData({nama:'', wilayah:'', polo:{}, lenganPanjangPolo:0, lenganKerutPolo:0, kaos:{}, lenganPanjangKaos:0, lenganKerutKaos:0, topi:0, mug:0});
+              }}
+              className="btn-restart"
+            >
+              Buat Pesanan Baru
+            </button>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 mb-4">Berhasil!</h1>
-          <p className="text-xl text-slate-500 mb-10 leading-relaxed">Pesanan Anda telah kami terima dan akan segera diproses.</p>
-          <button 
-            onClick={() => {
-              setSubmitted(false);
-              setFormData({nama:'', wilayah:'', polo:{}, lenganPanjangPolo:0, lenganKerutPolo:0, kaos:{}, lenganPanjangKaos:0, lenganKerutKaos:0, topi:0, mug:0});
-            }}
-            className="w-full bg-slate-900 text-white py-6 rounded-2xl font-bold text-2xl shadow-xl hover:bg-black active:scale-95 transition-all"
-          >
-            Pesan Lagi
-          </button>
         </div>
-      </div>
-    );
-  }
+      ) : (
+        <div className="container">
+          <header className="header">
+            <h1>Form Pesanan</h1>
+            <p>Silakan isi identitas dan pilih pesanan Anda di bawah ini.</p>
+          </header>
 
-  return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-8 font-sans pb-48">
-      <button onClick={() => setView('admin')} className="fixed top-4 right-4 text-slate-300 hover:text-blue-500 z-10 transition-colors"><Database size={24}/></button>
-
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-2 tracking-tight">Formulir Atribut</h1>
-          <p className="text-xl text-slate-500 font-medium">Lengkapi data diri dan pilih produk yang Anda inginkan.</p>
-        </div>
-
-        <div className="space-y-6">
-          
-          {/* Section 1: Data Diri */}
-          <div className="bg-white p-6 md:p-8 rounded-[32px] shadow-lg border-l-8 border-blue-500 transition-all hover:shadow-xl">
-            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><User className="text-blue-500" size={28}/> Identitas Anda</h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nama Lengkap</label>
+          {/* Identitas */}
+          <div className="card">
+            <h2 className="section-title"><User color="var(--primary)" size={40}/> Identitas Anda</h2>
+            <div className="grid-inputs">
+              <div className="input-wrapper">
+                <label>Nama Lengkap</label>
                 <input 
                   type="text" 
                   value={formData.nama} 
                   onChange={(e) => setFormData({...formData, nama: e.target.value})}
-                  className="w-full p-5 text-lg bg-slate-50 rounded-2xl border-2 border-slate-100 focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                  placeholder="Misal: Budi Santoso"
+                  className="input-field" 
+                  placeholder="Contoh: Budi Santoso"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Wilayah / Cabang</label>
+              <div className="input-wrapper">
+                <label>Wilayah / Cabang</label>
                 <input 
                   type="text" 
                   value={formData.wilayah} 
                   onChange={(e) => setFormData({...formData, wilayah: e.target.value})}
-                  className="w-full p-5 text-lg bg-slate-50 rounded-2xl border-2 border-slate-100 focus:border-blue-500 focus:bg-white outline-none transition-all" 
-                  placeholder="Misal: Jakarta Barat"
+                  className="input-field" 
+                  placeholder="Contoh: Jakarta Selatan"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 2: Polo */}
-          <div className="bg-white p-6 md:p-8 rounded-[32px] shadow-lg border-l-8 border-indigo-500 transition-all hover:shadow-xl">
-            <h2 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-3"><Package className="text-indigo-500" size={28}/> Pesanan Polo (Rp 85rb)</h2>
-            <p className="text-slate-400 mb-6 font-medium">Silakan pilih ukuran baju yang ingin dipesan:</p>
-            <div className="bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100">
+          {/* Polo Section */}
+          <div className="card card-indigo">
+            <h2 className="section-title"><Package color="var(--indigo)" size={40}/> Pesanan Polo (Rp 85rb)</h2>
+            <div className="sizes-grid">
               {POLO_SIZES.map(s => (
                 <QuantitySelector 
                   key={s.id} 
@@ -397,11 +514,10 @@ export default function App() {
                       lenganKerutPolo: Math.min(formData.lenganKerutPolo, newTotal - Math.min(formData.lenganPanjangPolo, newTotal))
                     });
                   }}
-                  color="indigo"
+                  colorClass="indigo"
                 />
               ))}
             </div>
-            
             <SleeveSection 
               totalQty={totalPolo}
               longValue={formData.lenganPanjangPolo}
@@ -411,11 +527,10 @@ export default function App() {
             />
           </div>
 
-          {/* Section 3: Kaos */}
-          <div className="bg-white p-6 md:p-8 rounded-[32px] shadow-lg border-l-8 border-emerald-500 transition-all hover:shadow-xl">
-            <h2 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-3"><Package className="text-emerald-500" size={28}/> Pesanan Kaos (Rp 75rb)</h2>
-            <p className="text-slate-400 mb-6 font-medium">Silakan pilih ukuran baju yang ingin dipesan:</p>
-            <div className="bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100">
+          {/* Kaos Section */}
+          <div className="card card-emerald">
+            <h2 className="section-title"><Package color="var(--emerald)" size={40}/> Pesanan Kaos (Rp 75rb)</h2>
+            <div className="sizes-grid">
               {KAOS_SIZES.map(s => (
                 <QuantitySelector 
                   key={s.id} 
@@ -431,11 +546,10 @@ export default function App() {
                       lenganKerutKaos: Math.min(formData.lenganKerutKaos, newTotal - Math.min(formData.lenganPanjangKaos, newTotal))
                     });
                   }}
-                  color="emerald"
+                  colorClass="emerald"
                 />
               ))}
             </div>
-
             <SleeveSection 
               totalQty={totalKaos}
               longValue={formData.lenganPanjangKaos}
@@ -445,47 +559,37 @@ export default function App() {
             />
           </div>
 
-          {/* Section 4: Topi & Mug */}
-          <div className="bg-white p-6 md:p-8 rounded-[32px] shadow-lg border-l-8 border-orange-500 transition-all hover:shadow-xl">
-            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><ShoppingCart className="text-orange-500" size={28}/> Topi & Mug</h2>
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <QuantitySelector label="Topi (Rp 35rb)" value={formData.topi} onChange={(v) => setFormData({...formData, topi: v})} color="orange" />
-              </div>
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <QuantitySelector label="Mug (Rp 25rb)" value={formData.mug} onChange={(v) => setFormData({...formData, mug: v})} color="orange" />
-              </div>
+          {/* Aksesori Section */}
+          <div className="card card-orange">
+            <h2 className="section-title"><ShoppingCart color="var(--orange)" size={40}/> Aksesori Tambahan</h2>
+            <div className="sizes-grid">
+              <QuantitySelector label="Topi (Rp 35rb)" value={formData.topi} onChange={(v) => setFormData({...formData, topi: v})} colorClass="orange" />
+              <QuantitySelector label="Mug (Rp 25rb)" value={formData.mug} onChange={(v) => setFormData({...formData, mug: v})} colorClass="orange" />
             </div>
           </div>
-        </div>
 
-        {/* Floating Footer */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 bg-white/95 backdrop-blur-md border-t-2 border-slate-200 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-          <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-center md:text-left">
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Total Pembayaran</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-3xl md:text-5xl font-black text-blue-600">Rp {calculateTotalHarga().toLocaleString()}</p>
-                <p className="text-sm text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg">{totalItems} Item</p>
+          {/* Footer - Price & Submit */}
+          <div className="footer">
+            <div className="footer-content">
+              <div className="price-display">
+                <p className="price-label">Estimasi Total Pembayaran</p>
+                <div className="price-val">
+                  Rp {calculateTotalHarga().toLocaleString()}
+                  <span className="item-count">{totalItems} Item</span>
+                </div>
               </div>
+              <button 
+                onClick={handleSubmit}
+                disabled={loading || totalItems === 0 || !formData.nama || !formData.wilayah}
+                className="btn-submit"
+              >
+                {loading ? <Loader2 style={{animation: 'spin 1s linear infinite'}} size={40} /> : <><Send size={40}/> KIRIM PESANAN</>}
+              </button>
             </div>
-            
-            <button 
-              onClick={handleSubmit}
-              disabled={loading || totalItems === 0 || !formData.nama || !formData.wilayah}
-              className={`w-full md:w-auto px-16 py-5 md:py-6 rounded-[24px] text-xl md:text-2xl font-black shadow-2xl flex items-center justify-center gap-3 transition-all ${
-                totalItems > 0 && formData.nama && formData.wilayah 
-                ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-green-200 active:scale-95' 
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-              }`}
-            >
-              {loading ? <Loader2 className="animate-spin" size={32} /> : <><Send size={28}/> KIRIM</>}
-            </button>
+            {error && <p className="error-msg"><AlertCircle size={24}/> {error}</p>}
           </div>
-          {error && <p className="text-center text-red-600 font-black mt-3 text-sm flex items-center justify-center gap-2 animate-bounce"><AlertCircle size={16}/> {error}</p>}
         </div>
-
-      </div>
+      )}
     </div>
   );
 }
